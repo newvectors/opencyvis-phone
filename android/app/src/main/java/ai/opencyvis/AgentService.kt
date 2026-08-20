@@ -342,6 +342,10 @@ class AgentService : Service() {
         releaseAgentWakeLock()
 
         Log.i(TAG, "startAgent config: provider=${config.apiProvider} model=${config.model} baseUrl=${config.baseUrl} key=${config.apiKey.take(10)}...")
+        val llmTemperature = when (config.apiProvider) {
+            ConfigRepository.PROVIDER_KIMI -> 0.6
+            else -> 0.1
+        }
         val llmClient: LLMClientInterface = when (config.apiProvider) {
             ConfigRepository.PROVIDER_ANTHROPIC -> AnthropicClient(
                 apiKey = config.apiKey,
@@ -355,7 +359,9 @@ class AgentService : Service() {
             else -> LLMClient(
                 apiKey = config.apiKey,
                 model = config.model,
-                baseUrl = config.baseUrl
+                baseUrl = config.baseUrl,
+                temperature = llmTemperature,
+                disableThinking = config.apiProvider == ConfigRepository.PROVIDER_KIMI
             )
         }
 
@@ -402,7 +408,8 @@ class AgentService : Service() {
                     taskDisplayGuard?.trackLaunch(launchedPkg)
                     mainHandler.postDelayed({ refreshControlledTasksFromVd("open_app_success") }, 250)
                 },
-                backend = b
+                backend = b,
+                blacklistedPackages = config.blacklistedPackages
             )
 
             val newEngine = AgentEngine(
@@ -416,6 +423,7 @@ class AgentService : Service() {
                     VdAccessibilityService.captureViewTree(displayId, w, h)
                 },
                 shouldForwardScreenshot = { config.imSendStepScreenshots },
+                blacklistedPackages = config.blacklistedPackages,
                 onSaveRoutine = { name, icon, instr, schedType, schedTime, schedRepeat,
                                   schedInterval, schedLocation, schedOnEnter ->
                     scope.launch(Dispatchers.IO) {
@@ -528,7 +536,8 @@ class AgentService : Service() {
                     taskDisplayGuard?.trackLaunch(launchedPkg)
                     mainHandler.postDelayed({ refreshControlledTasksFromVd("debug_open_app_success") }, 250)
                 },
-                backend = b
+                backend = b,
+                blacklistedPackages = config.blacklistedPackages
             ),
             config.maxSteps,
             vdm,
@@ -536,7 +545,8 @@ class AgentService : Service() {
             memoryRepository = memoryRepo,
             viewTreeProvider = { displayId, w, h ->
                 VdAccessibilityService.captureViewTree(displayId, w, h)
-            }
+            },
+            blacklistedPackages = config.blacklistedPackages
         )
         engine = newEngine
         currentInstruction = "debug takeover verification"
